@@ -1,0 +1,85 @@
+// =======================================
+//       TRANSMITTER UNIT CODE
+// =======================================
+
+#include <Wire.h>
+#include <MPU6050_light.h>
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+MPU6050 mpu(Wire);
+
+// Receiver MAC address
+uint8_t receiverMac[] = {0xF4, 0xCF, 0xA2, 0x60, 0x26, 0x1F};
+
+// Thresholds
+const float pitchForwardThreshold = -15.0;
+const float pitchBackwardThreshold = 15.0;
+const float rollRightThreshold = -15.0;
+const float rollLeftThreshold = 15.0;
+
+// For stability
+unsigned long lastSendTime = 0;
+const int sendInterval = 300; // milliseconds
+String lastCommand = "";
+
+void sendCommand(String command) {
+  //if (command == lastCommand) return; // Avoid spamming same command
+  lastCommand = command;
+  esp_now_send(receiverMac, (uint8_t *)command.c_str(), command.length() + 1);
+  Serial.println("Sent: " + command);
+}
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(D2, D1);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+
+  if (esp_now_init() != 0) {
+    Serial.println("ESP-NOW init failed");
+    while (true);
+  }
+
+  esp_now_set_self_role(ESP_NOW_ROLE_CONTROLLER);
+  esp_now_add_peer(receiverMac, ESP_NOW_ROLE_SLAVE, 1, NULL, 0);
+
+  byte status = mpu.begin();
+  if (status != 0) {
+    Serial.println("MPU6050 init failed");
+    while (1);
+  }
+
+  Serial.println("Calibrating MPU...");
+  delay(1000);
+  mpu.calcOffsets(true, true);
+  Serial.println("Calibration done!");
+}
+
+void loop() {
+  mpu.update();
+
+  float pitch = mpu.getAngleX();
+  float roll = mpu.getAngleY();
+
+  String command = "STOP";
+
+  if (abs(pitch) < 10 && abs(roll) < 10) {
+    command = "STOP";
+  } else if (pitch < pitchForwardThreshold) {
+    command = "FORWARD";
+  } else if (pitch > pitchBackwardThreshold) {
+    command = "BACKWARD";
+  } else if (roll < rollRightThreshold) {
+    command = "RIGHT";
+  } else if (roll > rollLeftThreshold) {
+    command = "LEFT";
+  }
+
+  if (millis() - lastSendTime > sendInterval) {
+    sendCommand(command);
+    lastSendTime = millis();
+  }
+}
