@@ -1,0 +1,133 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+// MAC address of transmitter (MPU6050 unit)
+uint8_t masterAddress[] = {0xF4, 0xCF, 0xA2, 0x60, 0x26, 0x1F};
+
+String lastCommand = "STOP";
+unsigned long lastReceivedTime = 0;
+const unsigned long commandTimeout = 1500; // 1.5 seconds
+
+bool forwardBlocked = false;
+unsigned long forwardBlockTime = 0;
+const unsigned long forwardBlockDuration = 1000; // 1 second block duration (tune if needed)
+
+// Motor pins
+// Left side L298N
+#define L1_IN1 D1
+#define L1_IN2 D2
+#define L1_IN3 D3
+#define L1_IN4 D4
+
+// Right side L298N
+#define R1_IN1 D5
+#define R1_IN2 D6
+#define R1_IN3 D7
+#define R1_IN4 D8
+
+void stopAllMotors() {
+  digitalWrite(L1_IN1, LOW); digitalWrite(L1_IN2, LOW);
+  digitalWrite(L1_IN3, LOW); digitalWrite(L1_IN4, LOW);
+  digitalWrite(R1_IN1, LOW); digitalWrite(R1_IN2, LOW);
+  digitalWrite(R1_IN3, LOW); digitalWrite(R1_IN4, LOW);
+}
+
+void moveForward() {
+  digitalWrite(L1_IN1, HIGH); digitalWrite(L1_IN2, LOW);
+  digitalWrite(L1_IN3, HIGH); digitalWrite(L1_IN4, LOW);
+
+  // Flip the logic here
+  digitalWrite(R1_IN1, LOW); digitalWrite(R1_IN2, HIGH);
+  digitalWrite(R1_IN3, HIGH); digitalWrite(R1_IN4, LOW);
+}
+
+void moveBackward() {
+  digitalWrite(L1_IN1, LOW); digitalWrite(L1_IN2, HIGH);
+  digitalWrite(L1_IN3, LOW); digitalWrite(L1_IN4, HIGH);
+
+  // Flip the logic here
+  digitalWrite(R1_IN1, HIGH); digitalWrite(R1_IN2, LOW);
+  digitalWrite(R1_IN3, LOW); digitalWrite(R1_IN4, HIGH);
+}
+
+void turnRight() {
+  digitalWrite(L1_IN1, HIGH); digitalWrite(L1_IN2, LOW);
+  digitalWrite(L1_IN3, HIGH); digitalWrite(L1_IN4, LOW);
+
+  // Flip the logic here
+  digitalWrite(R1_IN1, HIGH); digitalWrite(R1_IN2, LOW);
+  digitalWrite(R1_IN3, LOW); digitalWrite(R1_IN4, HIGH);
+}
+
+void turnLeft() {
+  digitalWrite(L1_IN1, LOW); digitalWrite(L1_IN2, HIGH);
+  digitalWrite(L1_IN3, LOW); digitalWrite(L1_IN4, HIGH);
+
+  // Flip the logic here
+  digitalWrite(R1_IN1, LOW); digitalWrite(R1_IN2, HIGH);
+  digitalWrite(R1_IN3, HIGH); digitalWrite(R1_IN4, LOW);
+}
+
+
+void onReceive(uint8_t *mac, uint8_t *incomingData, uint8_t len) {
+  String command = String((char*)incomingData);
+  command.trim();
+
+  if (command == "STOP") {
+    forwardBlocked = true;
+    forwardBlockTime = millis();
+  }
+
+  lastCommand = command;
+  lastReceivedTime = millis();
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(L1_IN1, OUTPUT); pinMode(L1_IN2, OUTPUT);
+  pinMode(L1_IN3, OUTPUT); pinMode(L1_IN4, OUTPUT);
+  pinMode(R1_IN1, OUTPUT); pinMode(R1_IN2, OUTPUT);
+  pinMode(R1_IN3, OUTPUT); pinMode(R1_IN4, OUTPUT);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+
+  if (esp_now_init() != 0) {
+    Serial.println("ESP-NOW init failed!");
+    return;
+  }
+
+  esp_now_set_self_role(ESP_NOW_ROLE_SLAVE);
+  esp_now_register_recv_cb(onReceive);
+
+  Serial.println("Receiver ready.");
+}
+
+void loop() {
+  unsigned long now = millis();
+
+  if (now - lastReceivedTime > commandTimeout) {
+    stopAllMotors();
+    return;
+  }
+
+  // Unblock forward after timeout
+  if (forwardBlocked && (now - forwardBlockTime > forwardBlockDuration)) {
+    forwardBlocked = false;
+  }
+
+  if (lastCommand == "FORWARD" && forwardBlocked) {
+    stopAllMotors();  // Override forward with STOP
+  } else if (lastCommand == "FORWARD") {
+    moveBackward();
+  } else if (lastCommand == "BACKWARD") {
+    moveForward();
+  } else if (lastCommand == "RIGHT") {
+    turnRight();
+  } else if (lastCommand == "LEFT") {
+    turnLeft();
+  } else {
+    stopAllMotors();
+  }
+}
