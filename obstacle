@@ -1,0 +1,76 @@
+#include <ESP8266WiFi.h>
+#include <espnow.h>
+
+// Define ultrasonic sensor pins
+#define TRIG_PIN D1
+#define ECHO_PIN D2
+
+// LED and buzzer
+#define LED_PIN D3
+#define BUZZER_PIN D4
+
+// Threshold distance in cm
+const int OBSTACLE_DISTANCE = 35;
+
+// MAC address of the car ESP (ESP1)
+uint8_t carMac[] = {0xF4, 0xCF, 0xA2, 0x60, 0x26, 0x1F};
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(BUZZER_PIN, OUTPUT);
+
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(BUZZER_PIN, LOW);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+
+  if (esp_now_init() != 0) {
+    Serial.println("ESP-NOW init failed");
+    return;
+  }
+
+  esp_now_set_self_role(ESP_NOW_ROLE_CONTROLLER);
+  esp_now_add_peer(carMac, ESP_NOW_ROLE_SLAVE, 1, NULL, 0);
+}
+
+void loop() {
+  long duration;
+  int distance;
+
+  // Trigger ultrasonic
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  // Read echo time
+  duration = pulseIn(ECHO_PIN, HIGH);
+  distance = duration * 0.034 / 2;
+
+  Serial.print("Distance: ");
+  Serial.println(distance);
+  
+
+  if (distance > 0 && distance < OBSTACLE_DISTANCE) {
+    const char* stopCmd = "STOP";
+    esp_now_send(carMac, (uint8_t*)stopCmd, strlen(stopCmd));
+
+    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(100);
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(100);
+  } else {
+    digitalWrite(LED_PIN, LOW);
+    digitalWrite(BUZZER_PIN, LOW);
+  }
+
+  delay(200); // Tune as needed
+}
