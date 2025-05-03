@@ -79,6 +79,13 @@ Roby is divided into three ESP8266 units, each with specific responsibilities:
 
 Gesture-Controlled Robotics, Obstacle Detection, ESP-NOW, MPU6050, Ultrasonic Sensor, Fail-Safe System, Differential Steering, Embedded Control, Sensor Fusion, Emergency Braking, Wireless Communication, Priority Control, Pitch-Roll Analysis
 
+## 🏞️ Images
+![WhatsApp Image 2025-05-04 at 03 07 06_ec45fec2](https://github.com/user-attachments/assets/a414e296-510e-4d73-b9bf-9d57bcfce683)
+![IMG20250424111219](https://github.com/user-attachments/assets/58d8c667-effd-4bc5-941c-7ec41b4c5530)
+![IMG20250424111235](https://github.com/user-attachments/assets/bf2a58ae-6359-4ed2-8875-9e64b8cb7245)
+
+
+
 ## 📎 License
 
 This project is open-source and available under the MIT License.
